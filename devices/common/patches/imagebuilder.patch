@@ -131,7 +131,7 @@
  	$(OPKG) install $(firstword $(wildcard $(LINUX_DIR)/libc_*.ipk $(PACKAGE_DIR)/libc_*.ipk))
  	$(OPKG) install $(firstword $(wildcard $(LINUX_DIR)/kernel_*.ipk $(PACKAGE_DIR)/kernel_*.ipk))
 -	$(OPKG) install $(BUILD_PACKAGES)
-+	$(OPKG) install $(BUILD_PACKAGES) luci-i18n-base-zh-cn || true
++	$(OPKG) install --force-maintainer $(BUILD_PACKAGES) luci-i18n-base-zh-cn || true
 +	$(if $(USER_FILES), \
 +	find $(USER_FILES) -name "*.ipk" -print0 | \
 +	while IFS= read -r -d '' ipk; do \
@@ -152,3 +152,10 @@
  
  build_image: FORCE
  	@echo
+	@echo Building images...
+ 	rm -rf $(BUILD_DIR)/json_info_files/
+-	$(NO_TRACE_MAKE) -C target/linux/$(BOARD)/image install TARGET_BUILD=1 IB=1 EXTRA_IMAGE_NAME="$(EXTRA_IMAGE_NAME)" \
++	nice -n 19 $(NO_TRACE_MAKE) -C target/linux/$(BOARD)/image install TARGET_BUILD=1 IB=1 EXTRA_IMAGE_NAME="$(EXTRA_IMAGE_NAME)" \
+ 		$(if $(USER_PROFILE),PROFILE="$(USER_PROFILE)")
+ 
+ $(BIN_DIR)/profiles.json: FORCE
