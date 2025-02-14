@@ -13,7 +13,7 @@ sed -i '/	refresh_config();/d' scripts/feeds
 ./scripts/feeds install -a -p miaogongzi -f
 ./scripts/feeds install -a
 
-sed -i "/DISTRIB_DESCRIPTION/c\DISTRIB_DESCRIPTION=\"%D %C by miaogongzi\"" package/base-files/files/etc/openwrt_release
+sed --follow-symlinks -i "s#%C\"#%C by miaogongzi\"#" package/base-files/files/etc/os-release
 sed -i -e '$a /etc/bench.log' \
         -e '/\/etc\/profile/d' \
         -e '/\/etc\/shinit/d' \
@@ -61,7 +61,6 @@ wget -N https://raw.githubusercontent.com/coolsnowwolf/lede/master/target/linux/
 
 wget -N https://patch-diff.githubusercontent.com/raw/openwrt/openwrt/pull/16414.patch -P devices/common/patches/
 
-sed -i "/mediaurlbase/d" package/feeds/*/luci-theme*/root/etc/uci-defaults/*
 
 # find target/linux/x86 -name "config*" -exec bash -c 'cat kernel.conf >> "{}"' \;
 sed -i 's/max_requests 3/max_requests 20/g' package/network/services/uhttpd/files/uhttpd.config
