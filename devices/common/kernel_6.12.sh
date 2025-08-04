@@ -13,14 +13,8 @@ cd -
 cd feeds/packages
 rm -rf net/xtables-addons net/strongswan utils/coremark
 git_clone_path master https://github.com/openwrt/packages net/xtables-addons net/strongswan
-
 cd ../../
 
-cd feeds/packages
-rm -rf lang/rust
-git_clone_path Rust https://github.com/mgz0227/packages lang/rust
-
-cd ../../
 
 cd package
 rm -rf devel/kselftests-bpf devel/perf
