@@ -104,6 +104,8 @@ jobs:
         libelf-dev device-tree-compiler libgmp3-dev libmpc-dev libfuse-dev dwarves
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
+        #sudo rm -f /usr/bin/gmake || true
+
         sudo timedatectl set-timezone "Asia/Shanghai"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
         git config --global user.name "github-actions[bot]"
@@ -272,15 +274,13 @@ jobs:
         df -hT
 
 
-
     - name: Compile the firmware
       id: compile
       run: |
         shopt -s extglob
         cd openwrt
         echo -e "$(($(nproc)+1)) thread compile"
-        make -j$(($(nproc)+1)) 2>&1 | tee error.log || \
-        make V=sc 2>&1 | tee -a error.log || (tail -50 build.log; curl -k --data chat_id="${{ env.TELEGRAM_CHAT_ID }}" --data "text=❌ OpenWrt ${{ env.VERSION }} ${{matrix.target}} 编译失败 😂" "https://api.telegram.org/bot${{ env.TELEGRAM_TOKEN }}/sendMessage";df -hT;exit 1)
+        make -j$(($(nproc)+1)) || make V=sc &>error1.log || (tail -50 build.log; curl -k --data chat_id="${{ env.TELEGRAM_CHAT_ID }}" --data "text=❌ OpenWrt ${{ env.VERSION }} ${{matrix.target}} 编译失败 😂" "https://api.telegram.org/bot${{ env.TELEGRAM_TOKEN }}/sendMessage";df -hT;exit 1)
         #make -j1 V=sc || make V=sc &>build.log || (tail -50 build.log; curl -k --data chat_id="${{ env.TELEGRAM_CHAT_ID }}" --data "text=❌ OpenWrt ${{ env.VERSION }} ${{matrix.target}} 编译失败 😂" "https://api.telegram.org/bot${{ env.TELEGRAM_TOKEN }}/sendMessage";df -hT;exit 1)
         sed -i "s/# CONFIG_IB is not set/CONFIG_IB=y/" .config
         rm -rf staging_dir/toolchain-*/bin/*openwrt-linux-musl-lto-dump
@@ -301,17 +301,17 @@ jobs:
                 Emoji=("🎉" "🤞" "✨" "🎁" "🎈" "🎄" "🎨" "💋" "🍓" "🍕" "🍉" "💐" "🌴" "🚀" "🛸" "🗽" "⛅" "🌈" "🔥" "⛄" "🐶" "🏅" "🦄" "🐤")
                 echo "EMOJI=${Emoji[$[$RANDOM % ${#Emoji[@]}]]}" >> $GITHUB_ENV
                 # Unzip .gz files
-                for file in *.gz; do
-                  gunzip "$file"
-                done
+             #   for file in *.gz; do
+            #      gunzip "$file"
+           #     done
         
                  # Rename all files, including IMG files after decompression
-                find . -type f -name "meowwrt-*" -exec rename "s/meowwrt-/MeowWrt-${{ env.VERSION }}.2025-/" {} + || true
+          #      find . -type f -name "meowwrt-*" -exec rename "s/meowwrt-/MeowWrt-${{ env.VERSION }}.2025-/" {} + || true
         
                 # Recompress all IMG files back to .gz format
-                for file in *.img; do
-                gzip "$file"
-                done
+         #       for file in *.img; do
+         #       gzip "$file"
+        #        done
                 
 
 
