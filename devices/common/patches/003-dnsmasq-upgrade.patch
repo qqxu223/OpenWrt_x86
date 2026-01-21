@@ -1,4 +1,4 @@
-From 37a5a3badda87ab56ffdd1f031ddbed63f4121a6 Mon Sep 17 00:00:00 2001
+From 74e851afa6f33eb0f93ccf3e1cbf8b2ee7c00af2 Mon Sep 17 00:00:00 2001
 From: gongzi miao <miaogongzi0227@gmail.com>
 Date: Mon, 19 Jan 2026 00:43:55 +0800
 Subject: [PATCH] dnsmasq: bump release to 2.92
@@ -11,15 +11,18 @@ all remaining patches not required
 
 Changelog for version 2.92 https://thekelleys.org.uk/dnsmasq/CHANGELOG
 
+Modify dnsmasq Makefile default options
+
+Updated default build options for dnsmasq package.
 Signed-off-by: gongzi miao <miaogongzi0227@gmail.com>
 ---
- package/network/services/dnsmasq/Makefile     |  6 +++---
+ package/network/services/dnsmasq/Makefile     | 13 ++++++------
  ...00-remove-old-runtime-kernel-support.patch |  8 ++++----
  .../dnsmasq/patches/200-ubus_dns.patch        | 20 +++++++++----------
- 3 files changed, 17 insertions(+), 17 deletions(-)
+ 3 files changed, 20 insertions(+), 21 deletions(-)
 
 diff --git a/package/network/services/dnsmasq/Makefile b/package/network/services/dnsmasq/Makefile
-index 480f1dfc2b029d..5872a5344971ac 100644
+index 480f1dfc2b029d..0ba7b7833f2ccb 100644
 --- a/package/network/services/dnsmasq/Makefile
 +++ b/package/network/services/dnsmasq/Makefile
 @@ -8,13 +8,13 @@

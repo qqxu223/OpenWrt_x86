@@ -1,0 +1,332 @@
+From 24a0ce0ff7ca5725fce2f11167c9c92830bcffdd Mon Sep 17 00:00:00 2001
+From: gongzi miao <miaogongzi0227@gmail.com>
+Date: Wed, 21 Jan 2026 01:26:57 +0800
+Subject: [PATCH] remove-firewall4
+
+---
+ net/adblock/Makefile                      |   2 +-
+ net/adblock/files/95-adblock-housekeeping |  22 +--
+ net/adblock/files/adblock.sh              | 190 ++++++----------------
+ 3 files changed, 51 insertions(+), 163 deletions(-)
+
+diff --git a/feeds/packages/net/adblock/Makefile b/net/adblock/Makefile
+index 57565ebca436aa..b5f30d5df5aad5 100644
+--- a/feeds/packages/net/adblock/Makefile
++++ b/feeds/packages/net/adblock/Makefile
+@@ -17,7 +17,7 @@ define Package/adblock
+ 	SECTION:=net
+ 	CATEGORY:=Network
+ 	TITLE:=adblock blocks ad/abuse domains by using DNS
+-	DEPENDS:=+jshn +jsonfilter +firewall4 +coreutils +coreutils-sort +gawk +ca-bundle +rpcd +rpcd-mod-rpcsys
++	DEPENDS:=+jshn +jsonfilter +coreutils +coreutils-sort +gawk +ca-bundle +rpcd +rpcd-mod-rpcsys
+ 	PKGARCH:=all
+ endef
+ 
+diff --git a/feeds/packages/net/adblock/files/95-adblock-housekeeping b/feeds/packages/net/adblock/files/95-adblock-housekeeping
+index bb7c62070710ef..5a79269f359225 100755
+--- a/feeds/packages/net/adblock/files/95-adblock-housekeeping
++++ b/feeds/packages/net/adblock/files/95-adblock-housekeeping
+@@ -11,7 +11,7 @@ export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+ config="adblock"
+ old_options="adb_sources adb_forcedns adb_fetchutil adb_hag_sources adb_hst_sources adb_stb_sources adb_utc_sources \
+ 	adb_maxqueue adb_backup adb_dnsfilereset adb_tmpbase adb_mailcnt adb_safesearchmod adb_srcfile adb_srcarc adb_nice \
+-	adb_hag_feed adb_jaildir adb_dnsdenyip adb_dnsallowip adb_zonelist adb_portlist adb_dnsforce"
++	adb_hag_feed adb_jaildir adb_dnsdenyip adb_dnsallowip"
+ 
+ for option in ${old_options}; do
+ 	inplace="0"
+@@ -63,30 +63,10 @@ for option in ${old_options}; do
+ 						uci -q add_list ${config}.global.adb_hag_feed="wildcard/${value}"
+ 					fi
+ 				;;
+-				"adb_dnsforce")
+-					uci -q set ${config}.global.adb_nftforce="${value}"
+-				;;
+-				"adb_zonelist")
+-					uci -q set ${config}.global.adb_nftdevforce="${value}"
+-				;;
+-				"adb_portlist")
+-					uci -q set ${config}.global.adb_nftportforce="${value}"
+-				;;
+ 			esac
+ 		done
+ 		[ "${inplace}" = "0" ] && uci -q delete ${config}.global.${option}
+ 	fi
+ done
+ [ -n "$(uci -q changes ${config})" ] && uci -q commit ${config}
+-
+-# remove former adblock-related firewall zones
+-#
+-fwcfg="$(uci -qNX show "firewall" | awk 'BEGIN{FS="[.=]"};/adblock_/{if(zone==$2){next}else{ORS=" ";zone=$2;print zone}}')"
+-for section in ${fwcfg}; do
+-	uci -q delete firewall."${section}"
+-done
+-if [ -n "$(uci -q changes firewall)" ]; then
+-	uci -q commit firewall
+-	/etc/init.d/firewall reload
+-fi
+ exit 0
+diff --git a/feeds/packages/net/adblock/files/adblock.sh b/feeds/packages/net/adblock/files/adblock.sh
+index b4504202c603c9..ab29592801dfb8 100755
+--- a/feeds/packages/net/adblock/files/adblock.sh
++++ b/feeds/packages/net/adblock/files/adblock.sh
+@@ -13,19 +13,7 @@ export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
+ 
+ adb_enabled="0"
+ adb_debug="0"
+-adb_nftforce="0"
+-adb_nftdevforce=""
+-adb_nftportforce=""
+-adb_nftallow="0"
+-adb_nftmacallow=""
+-adb_nftdevallow=""
+-adb_nftblock="0"
+-adb_nftmacblock=""
+-adb_nftdevblock=""
+-adb_allowdnsv4=""
+-adb_allowdnsv6=""
+-adb_blockdnsv4=""
+-adb_blockdnsv6=""
++adb_dnsforce="0"
+ adb_dnsshift="0"
+ adb_dnsflush="0"
+ adb_dnstimeout="20"
+@@ -114,7 +102,6 @@ f_load() {
+ 	if [ "${adb_enabled}" = "0" ]; then
+ 		f_extconf
+ 		f_temp
+-		f_nftremove
+ 		f_rmdns
+ 		f_jsnup "disabled"
+ 		f_log "info" "adblock is currently disabled, please set the config option 'adb_enabled' to '1' to use this service"
+@@ -175,7 +162,6 @@ f_env() {
+ 	f_jsnup "processing"
+ 	f_extconf
+ 	f_temp
+-	f_nftadd
+ 	json_init
+ 	if [ -s "${adb_customfeedfile}" ]; then
+ 		if json_load_file "${adb_customfeedfile}" >/dev/null 2>&1; then
+@@ -582,7 +568,7 @@ f_count() {
+ # set external config options
+ #
+ f_extconf() {
+-	local config section
++	local config section zone port fwcfg
+ 
+ 	case "${adb_dns}" in
+ 		"dnsmasq")
+@@ -616,7 +602,52 @@ f_extconf() {
+ 			fi
+ 			;;
+ 	esac
+-	f_uci "${config}"
++
++	[ -n "${config}" ] && f_uci "${config}"
++	fwcfg="$(uci -qNX show "firewall" | "${adb_awkcmd}" 'BEGIN{FS="[.=]"};/adblock_/{if(zone==$2){next}else{ORS=" ";zone=$2;print zone}}')"
++	if [ "${adb_enabled}" = "1" ] && [ "${adb_dnsforce}" = "1" ] &&
++		/etc/init.d/firewall enabled; then
++		for zone in ${adb_zonelist}; do
++			for port in ${adb_portlist}; do
++				if ! printf "%s" "${fwcfg}" | "${adb_grepcmd}" -q "adblock_${zone}${port}"; then
++					config="firewall"
++					if "${adb_lookupcmd}" "localhost." "127.0.0.1:${port}" >/dev/null 2>&1; then
++						uci -q batch <<-EOC
++							set firewall."adblock_${zone}${port}"="redirect"
++							set firewall."adblock_${zone}${port}".name="Adblock DNS (${zone}, ${port})"
++							set firewall."adblock_${zone}${port}".src="${zone}"
++							set firewall."adblock_${zone}${port}".proto="tcp udp"
++							set firewall."adblock_${zone}${port}".src_dport="53"
++							set firewall."adblock_${zone}${port}".dest_port="${port}"
++							set firewall."adblock_${zone}${port}".target="DNAT"
++							set firewall."adblock_${zone}${port}".family="any"
++						EOC
++					else
++						uci -q batch <<-EOC
++							set firewall."adblock_${zone}${port}"="rule"
++							set firewall."adblock_${zone}${port}".name="Adblock DNS (${zone}, ${port})"
++							set firewall."adblock_${zone}${port}".src="${zone}"
++							set firewall."adblock_${zone}${port}".proto="tcp udp"
++							set firewall."adblock_${zone}${port}".dest_port="${port}"
++							set firewall."adblock_${zone}${port}".target="REJECT"
++							set firewall."adblock_${zone}${port}".dest="*"
++						EOC
++					fi
++				fi
++				fwcfg="${fwcfg/adblock_${zone}${port}[ |\$]/}"
++			done
++		done
++		fwcfg="${fwcfg#"${fwcfg%%[![:space:]]*}"}"
++		fwcfg="${fwcfg%"${fwcfg##*[![:space:]]}"}"
++	fi
++	if [ "${adb_enabled}" = "0" ] || [ "${adb_dnsforce}" = "0" ] || [ -n "${fwcfg}" ]; then
++		for section in ${fwcfg}; do
++			uci_remove firewall "${section}"
++		done
++	fi
++	if [ -n "$(uci -q changes firewall)" ]; then
++		f_uci "firewall"
++	fi
+ }
+ 
+ # restart dns backend
+@@ -710,125 +741,6 @@ f_etag() {
+ 	return "${out_rc}"
+ }
+ 
+-# add adblock-related nft rules
+-#
+-f_nftadd() {
+-	local devices device port file="${adb_tmpdir}/adb_nft.add"
+-
+-	# only proceed if at least one feature is enabled
+-	#
+-	if [ "${adb_nftallow}" = "0" ] && [ "${adb_nftblock}" = "0" ] && [ "${adb_nftforce}" = "0" ]; then
+-		return
+-	fi
+-
+-	{
+-		# nft header (tables, sets, base and regular chains)
+-		#
+-		printf "%s\n\n" "#!${adb_nftcmd} -f"
+-		if "${adb_nftcmd}" -t list table inet adblock >/dev/null 2>&1; then
+-			printf "%s\n" "delete table inet adblock"
+-		fi
+-		printf "%s\n" "add table inet adblock"
+-		if [ "${adb_nftallow}" = "1" ] && [ -n "${adb_nftmacallow}" ]; then
+-			printf "%s\n" "add set inet adblock mac_allow { type ether_addr; flags interval; auto-merge; elements = { ${adb_nftmacallow// /, } }; }"
+-		fi
+-		if [ "${adb_nftblock}" = "1" ] && [ -n "${adb_nftmacblock}" ]; then
+-			printf "%s\n" "add set inet adblock mac_block { type ether_addr; flags interval; auto-merge; elements = { ${adb_nftmacblock// /, } }; }"
+-		fi
+-		printf "%s\n" "add chain inet adblock pre-routing { type nat hook prerouting priority -150; policy accept; }"
+-		printf "%s\n" "add chain inet adblock _reject"
+-
+-		# reject chain rules
+-		#
+-		printf "%s\n" "add rule inet adblock _reject meta l4proto tcp counter reject with tcp reset"
+-		printf "%s\n" "add rule inet adblock _reject counter reject with icmpx host-unreachable"
+-
+-		# external allow rules
+-		#
+-		if [ "${adb_nftallow}" = "1" ]; then
+-			if [ -n "${adb_nftmacallow}" ]; then
+-				[ -n "${adb_allowdnsv4}" ] && printf "%s\n" "add rule inet adblock pre-routing meta nfproto ipv4 ether saddr @mac_allow meta l4proto { udp, tcp } th dport 53 counter dnat to ${adb_allowdnsv4}:53"
+-				[ -n "${adb_allowdnsv6}" ] && printf "%s\n" "add rule inet adblock pre-routing meta nfproto ipv6 ether saddr @mac_allow meta l4proto { udp, tcp } th dport 53 counter dnat to [${adb_allowdnsv6}]:53"
+-			fi
+-			for device in ${adb_nftdevallow}; do
+-				[ -n "${adb_allowdnsv4}" ] && printf "%s\n" "add rule inet adblock pre-routing iifname \"${device}\" meta nfproto ipv4 meta l4proto { udp, tcp } th dport 53 counter dnat to ${adb_allowdnsv4}:53"
+-				[ -n "${adb_allowdnsv6}" ] && printf "%s\n" "add rule inet adblock pre-routing iifname \"${device}\" meta nfproto ipv6 meta l4proto { udp, tcp } th dport 53 counter dnat to [${adb_allowdnsv6}]:53"
+-			done
+-		fi
+-
+-		# external block rules
+-		#
+-		if [ "${adb_nftblock}" = "1" ]; then
+-			if [ -n "${adb_nftmacblock}" ]; then
+-				[ -n "${adb_blockdnsv4}" ] && printf "%s\n" "add rule inet adblock pre-routing meta nfproto ipv4 ether saddr @mac_block meta l4proto { udp, tcp } th dport 53 counter dnat to ${adb_blockdnsv4}:53"
+-				[ -n "${adb_blockdnsv6}" ] && printf "%s\n" "add rule inet adblock pre-routing meta nfproto ipv6 ether saddr @mac_block meta l4proto { udp, tcp } th dport 53 counter dnat to [${adb_blockdnsv6}]:53"
+-			fi
+-			for device in ${adb_nftdevblock}; do
+-				[ -n "${adb_blockdnsv4}" ] && printf "%s\n" "add rule inet adblock pre-routing iifname \"${device}\" meta nfproto ipv4 meta l4proto { udp, tcp } th dport 53 counter dnat to ${adb_blockdnsv4}:53"
+-				[ -n "${adb_blockdnsv6}" ] && printf "%s\n" "add rule inet adblock pre-routing iifname \"${device}\" meta nfproto ipv6 meta l4proto { udp, tcp } th dport 53 counter dnat to [${adb_blockdnsv6}]:53"
+-			done
+-		fi
+-
+-		# local dns enforcement
+-		#
+-		if [ "${adb_nftforce}" = "1" ]; then
+-			# device/vlan exceptions
+-			#
+-			for device in ${adb_nftdevallow} ${adb_nftdevblock}; do
+-				case " ${devices} " in
+-					*" ${device} "*)
+-						;;
+-					*)	devices="${devices} ${device}"
+-						printf "%s\n" "add rule inet adblock pre-routing iifname \"${device}\" return"
+-						;;
+-				esac
+-			done
+-			# mac exceptions
+-			#
+-			for device in ${adb_nftdevforce}; do
+-				if [ "${adb_nftallow}" = "1" ] && [ -n "${adb_nftmacallow}" ]; then
+-					printf "%s\n" "add rule inet adblock pre-routing iifname \"${device}\" ether saddr @mac_allow return"
+-				fi
+-				if [ "${adb_nftblock}" = "1" ] && [ -n "${adb_nftmacblock}" ]; then
+-					printf "%s\n" "add rule inet adblock pre-routing iifname \"${device}\" ether saddr @mac_block return"
+-				fi
+-				# dns enforce rules
+-				#
+-				for port in ${adb_nftportforce}; do
+-					if [ "${port}" = "53" ]; then
+-						printf "%s\n" "add rule inet adblock pre-routing iifname \"${device}\" meta nfproto { ipv4, ipv6 } meta l4proto { udp, tcp } th dport ${port} counter redirect to :${port}"
+-					else
+-						printf "%s\n" "add rule inet adblock pre-routing iifname \"${device}\" meta nfproto { ipv4, ipv6 } meta l4proto { udp, tcp } th dport ${port} counter goto _reject"
+-					fi
+-				done
+-			done
+-		fi
+-	} >"${file}"
+-	if "${adb_nftcmd}" -f "${file}" >/dev/null 2>&1; then
+-		f_log "info" "adblock-related nft rules added"
+-	else
+-		f_log "err" "failed to add adblock-related nft rules"
+-	fi
+-}
+-
+-# remove adblock-related nft rules
+-#
+-f_nftremove() {
+-	local file="${adb_tmpdir}/adb_nft.remove"
+-
+-	if "${adb_nftcmd}" -t list table inet adblock >/dev/null 2>&1; then
+-		{
+-			printf "%s\n" "#!${adb_nftcmd} -f"
+-			printf "%s\n" "delete table inet adblock"
+-		} >"${file}"
+-
+-		if "${adb_nftcmd}" -f "${file}" >/dev/null 2>&1; then
+-			f_log "info" "adblock-related nft rules removed"
+-		else
+-			f_log "err" "failed to remove adblock-related nft rules"
+-		fi
+-	fi
+-}
+ 
+ # backup/restore/remove blocklists
+ #
+@@ -1281,7 +1193,7 @@ f_jsnup() {
+ 	json_add_string "dns_backend" "${adb_dns:-"-"} (${dns_ver:-"-"}), ${adb_finaldir:-"-"}, ${dns_mem:-"0"} MB"
+ 	json_add_string "run_ifaces" "trigger: ${adb_trigger:-"-"}, report: ${adb_repiface:-"-"}"
+ 	json_add_string "run_directories" "base: ${adb_basedir}, dns: ${adb_dnsdir}, backup: ${adb_backupdir}, report: ${adb_reportdir}"
+-	json_add_string "run_flags" "shift: $(f_char ${adb_dnsshift}), custom feed: $(f_char ${custom_feed}), ext. DNS (std/prot): $(f_char ${nft_unfiltered})/$(f_char ${nft_filtered}), force: $(f_char ${nft_force}), flush: $(f_char ${adb_dnsflush}), tld: $(f_char ${adb_tld}), search: $(f_char ${adb_safesearch}), report: $(f_char ${adb_report}), mail: $(f_char ${adb_mail}), jail: $(f_char ${jail})"
++	json_add_string "run_flags" "shift: $(f_char ${adb_dnsshift}), custom feed: $(f_char ${custom_feed}), force: $(f_char ${adb_dnsforce}), flush: $(f_char ${adb_dnsflush}), tld: $(f_char ${adb_tld}), search: $(f_char ${adb_safesearch}), report: $(f_char ${adb_report}), mail: $(f_char ${adb_mail}), jail: $(f_char ${adb_jail})"
+ 	json_add_string "last_run" "${runtime:-"-"}"
+ 	json_add_string "system_info" "cores: ${adb_cores}, fetch: ${adb_fetchcmd##*/}, ${adb_sysver}"
+ 	json_dump >"${adb_rtfile}"
+@@ -1754,16 +1666,13 @@ adb_lookupcmd="$(f_cmd nslookup)"
+ adb_dumpcmd="$(f_cmd tcpdump optional)"
+ adb_mailcmd="$(f_cmd msmtp optional)"
+ adb_logreadcmd="$(f_cmd logread optional)"
+-adb_nftcmd="$(f_cmd nft)"
+ 
+ # handle different adblock actions
+ #
+ f_load
+ case "${adb_action}" in
+ 	"stop")
+-		f_temp
+ 		f_jsnup "stopped"
+-		f_nftremove
+ 		f_rmdns
+ 		;;
+ 	"suspend")
+@@ -1784,7 +1693,6 @@ case "${adb_action}" in
+ 		;;
+ 	"restart")
+ 		f_jsnup "processing"
+-		f_nftremove
+ 		f_rmdns
+ 		f_env
+ 		f_main
