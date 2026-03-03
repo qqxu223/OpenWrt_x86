@@ -275,22 +275,7 @@ jobs:
             rm -rvf staging_dir/!(*${{ env.MTARGET }}*|host|hostpkg) build_dir/!(*${{ env.MTARGET }}*|host|hostpkg)
         fi
         df -hT
-    - name: Fix rust llvm 404 (clean rust host)
-      run: |
-          echo "Cleaning rust/llvm leftovers to avoid CI 404..."
-          cd openwrt
 
-          # 删除 rust host 构建残留
-          rm -rf build_dir/*/host/rustc-* 2>/dev/null || true
-          rm -rf build_dir/host/rustc-* 2>/dev/null || true
-
-          # 删除可能缓存的 rust / llvm 下载文件
-          rm -f dl/rust* 2>/dev/null || true
-          rm -f dl/llvm* 2>/dev/null || true
-          rm -f dl/*rust-lang* 2>/dev/null || true
-          rm -f dl/*ci-artifacts* 2>/dev/null || true
-
-          echo "Rust cache cleaned."
 
     - name: Compile the firmware
       id: compile
