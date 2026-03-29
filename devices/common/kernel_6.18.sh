@@ -5,10 +5,10 @@ shopt -s extglob
 rm -rf target/linux package/boot package/devel package/firmware package/kernel package/libs package/network package/kernel tools toolchain
 mkdir new; cp -rf .git new/.git
 cd new
-git reset --hard origin/6.18.y
+git reset --hard origin/main
 
 cp -rf --parents target/linux package/boot package/devel package/firmware package/kernel package/libs package/network package/kernel tools toolchain config ../
-rm -rf target/linux/bcm53xx
+
 cd -
 
 #nat46: fix reproducible-build failure and use latest git
