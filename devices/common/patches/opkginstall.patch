@@ -9,11 +9,10 @@
  const currentDisplayRows = [];
  
  function parseList(s, dest)
-@@ -186,7 +186,10 @@ function parseList(s, dest)
- 			val = RegExp.$2.trim();
+@@ -187,6 +187,10 @@ function parseList(s, dest)
  		}
  		else if (pkg) {
--			dest.pkgs[pkg.name] = pkg;
+ 			dest.pkgs[pkg.name] = pkg;
 +			const cur = dest.pkgs[pkg.name];
 +
 +			if (!cur || compareVersion(pkg.version || '0', cur.version || '0') >= 0)
@@ -21,7 +20,63 @@
  
  			const provides = dest.providers[pkg.name] ? [] : [ pkg.name ];
  
-@@ -302,10 +305,10 @@ function display(pattern)
+@@ -202,39 +206,40 @@ function parseList(s, dest)
+ }
+ 
+ function parseApkQueryJson(s, dest) {
+-	// Parse the raw JSON text string into an array
+ 	let rawData;
+ 	try {
+ 		rawData = JSON.parse(s);
+ 	} catch (e) {
+-		console.error("Failed to parse APK JSON:", e);
++		console.error('Failed to parse APK JSON:', e);
+ 		return;
+ 	}
+-	// Ensure rawData is actually an array before iterating
++
+ 	if (!Array.isArray(rawData))
+ 		return;
+-	// Ensure our storage objects exist on the destination
++
+ 	dest.pkgs = dest.pkgs || {};
+ 	dest.providers = dest.providers || {};
+ 
+-	// Single pass through each item in the new JSON array
+ 	for (const item of rawData) {
+-
+-		// Rename 'file-size' to 'size' while pulling out 'name'
+ 		const { name, 'file-size': size, ...attributes } = item;
+-
+-		// Construct the package object with the expected 'size' key
+ 		const pkg = { name, size, ...attributes };
+ 
+-		// Add/Update the package in the main map
+ 		dest.pkgs[name] = pkg;
+ 
+-		// Determine all provided names (a package always provides itself)
+ 		const provides = [name, ...(Array.isArray(pkg.provides) ? pkg.provides : [])];
+-		for (const p of provides) {
+-			dest.providers[p] = dest.providers[p] || [];
+-			if (!dest.providers[p].includes(pkg))
+-				dest.providers[p].push(pkg);
++
++		for (const raw of provides) {
++			const p = String(raw).trim();
++			const base = p.replace(/[<>=~].*$/, '');
++
++			for (const key of new Set([p, base])) {
++				if (!key)
++					continue;
++
++				dest.providers[key] = dest.providers[key] || [];
++				if (!dest.providers[key].includes(pkg))
++					dest.providers[key].push(pkg);
++			}
+ 		}
+ 	}
+ }
+@@ -302,10 +307,10 @@ function display(pattern)
  			const avail = packages.available.pkgs[name];
  			const inst  = packages.installed.pkgs[name];
  
@@ -34,7 +89,7 @@
  				continue;
  
  			ver = '%s » %s'.format(
-@@ -342,7 +345,7 @@ function display(pattern)
+@@ -342,7 +347,7 @@ function display(pattern)
  					'data-action': 'install',
  					'click': handleInstall
  				}, _('Install…'));
@@ -43,7 +98,7 @@
  				btn = E('div', {
  					'class': 'btn cbi-button-positive',
  					'data-package': name,
-@@ -827,7 +830,8 @@ function handleInstall(ev)
+@@ -827,7 +832,8 @@ function handleInstall(ev)
  						'id': 'overwrite-cb',
  						'type': 'checkbox',
  						'name': 'overwrite',
@@ -53,7 +108,7 @@
  					}), ' ',
  					E('label', { 'for': 'overwrite-cb' }), ' ',
  					_('Allow overwriting conflicting package files')
-@@ -906,9 +910,9 @@ function handleConfig(ev)
+@@ -906,9 +912,9 @@ function handleConfig(ev)
  		if (L.hasSystemFeature('apk')) {
                          files.push(base_dir + '/' + 'repositories.d/customfeeds.list',
                                     base_dir + '/' + 'repositories.d/distfeeds.list'
@@ -65,7 +120,7 @@
                  }
  
  		for (let i = 0; i < partials.length; i++) {
-@@ -958,7 +962,7 @@ function handleConfig(ev)
+@@ -958,7 +964,7 @@ function handleConfig(ev)
  					const data = {};
  					findParent(ev.target, '.modal').querySelectorAll('textarea[name]')
  						.forEach(function(textarea) {
@@ -74,7 +129,7 @@
  						});
  
  					ui.showModal(_('%s Configuration').format(L.hasSystemFeature('apk') ? 'APK' : 'OPKG'), [
-@@ -1030,6 +1034,25 @@ function handleRemove(ev)
+@@ -1030,6 +1036,24 @@ function handleRemove(ev)
  	]);
  }
  
@@ -96,11 +151,10 @@
 +	});
 +}
 +
-+
  function handlePkg(ev)
  {
  	return new Promise(function(resolveFn, rejectFn) {
-@@ -1047,7 +1070,7 @@ function handlePkg(ev)
+@@ -1047,7 +1071,7 @@ function handlePkg(ev)
  		const argv = [ cmd ];
  
  		if (cmd === 'remove')
@@ -109,7 +163,7 @@
  
  		if (rem && rem.checked)
  			argv.push('--autoremove');
-@@ -1126,7 +1149,7 @@ function handleUpload(ev)
+@@ -1126,7 +1150,7 @@ function handleUpload(ev)
  					'data-package': path,
  					'click': function(ev) {
  						handlePkg(ev).finally(function() {
@@ -118,7 +172,7 @@
  						});
  					}
  				}, _('Install'))
-@@ -1188,6 +1211,90 @@ return view.extend({
+@@ -1188,6 +1212,90 @@ return view.extend({
  	},
  
  	render(listData) {
@@ -209,7 +263,7 @@
  		const query = decodeURIComponent(L.toArray(location.search.match(/\bquery=([^=]+)\b/))[1] || '');
  
  		const view = E([], [
-@@ -1220,7 +1327,7 @@ return view.extend({
+@@ -1220,7 +1328,7 @@ return view.extend({
  				E('div', {}, [
  					E('label', {'id': 'download-label'}, _('Download and install package') + ':'),
  					E('span', { 'class': 'control-group' }, [
@@ -218,7 +272,7 @@
  						E('button', { 'class': 'btn cbi-button cbi-button-action', 'click': handleManualInstall, 'disabled': isReadonlyView }, [ _('OK') ])
  					])
  				]),
-@@ -1229,6 +1336,7 @@ return view.extend({
+@@ -1229,6 +1337,7 @@ return view.extend({
  					E('label', {'id': 'action-label'}, _('Actions') + ':'), ' ',
  					E('span', { 'class': 'control-group' }, [
  						E('button', { 'class': 'btn cbi-button-positive', 'data-command': 'update', 'click': handlePkg, 'disabled': isReadonlyView }, [ _('Update lists…') ]), ' ',
@@ -226,7 +280,7 @@
  						E('button', { 'class': 'btn cbi-button-action', 'click': handleUpload, 'disabled': isReadonlyView }, [ _('Upload Package…') ]), ' ',
  						E('button', { 'class': 'btn cbi-button-neutral', 'click': handleConfig }, [ _('Configure %s').format(L.hasSystemFeature('apk') ? 'apk' : 'opkg') ])
  					])
-@@ -1314,7 +1422,16 @@ return view.extend({
+@@ -1314,7 +1423,16 @@ return view.extend({
  		]);
  
  		requestAnimationFrame(function() {
@@ -256,13 +310,11 @@
  		(
  			cmd="$ipkg_bin"
  
-@@ -89,10 +89,45 @@ case "$action" in
+@@ -88,7 +88,45 @@ case "$action" in
  
  			if flock -x 200; then
  				pkmcmd="$cmd $action $@"
 -				$cmd $action "$@" </dev/null >/tmp/ipkg.out 2>/tmp/ipkg.err
--				code=$?
--				stdout=$(cat /tmp/ipkg.out)
 +				if [ $action == "upgradeall" ]; then
 +					$cmd update </dev/null >/tmp/ipkg.out 2>/tmp/ipkg.err
 +					code=$?
@@ -296,16 +348,16 @@
 +						fi
 +					;;
 +				esac
- 				stderr=$(cat /tmp/ipkg.err)
++ 				stderr=$(cat /tmp/ipkg.err)
 +				[ -n "$stderr" ] || {
 +					echo "🎉 已完成, 请关闭本窗口~" >>/tmp/ipkg.out
 +					code=0
 +				}
 +				stdout=$(cat /tmp/ipkg.out)
- 			else
- 				code=255
- 				stderr="Failed to acquire lock"
-@@ -110,7 +145,7 @@ case "$action" in
+ 				code=$?
+ 				stdout=$(cat /tmp/ipkg.out)
+ 				stderr=$(cat /tmp/ipkg.err)
+@@ -109,7 +147,7 @@ case "$action" in
  	;;
  	*)
  		echo "Usage: $0 {list-installed|list-available|update}" >&2
