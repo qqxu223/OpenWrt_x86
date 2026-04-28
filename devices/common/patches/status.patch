@@ -143,3 +143,73 @@
  
  		const board = JSON.parse(data[1]),
  		      port_map = buildInterfaceMapping(data[2], data[3]),
+
+From 72573954e33011c916cd630dac936de64538cd8d Mon Sep 17 00:00:00 2001
+From: miaogongzi <miaogongzi0227@gmail.com>
+Date: Mon, 27 Apr 2026 08:44:37 +0800
+Subject: [PATCH] Remove handleToggleSection function
+
+Removed the handleToggleSection function and its related code for toggling section visibility.
+
+Signed-off-by: miaogongzi <miaogongzi0227@gmail.com>
+---
+ .../resources/view/status/index.js            | 37 +------------------
+ 1 file changed, 1 insertion(+), 36 deletions(-)
+
+diff --git a/package/feeds/luci/luci-mod-status/htdocs/luci-static/resources/view/status/index.js b/package/feeds/luci/luci-mod-status/htdocs/luci-static/resources/view/status/index.js
+index 75f5ccb40779..17f461bde7e3 100644
+--- a/package/feeds/luci/luci-mod-status/htdocs/luci-static/resources/view/status/index.js
++++ b/package/feeds/luci/luci-mod-status/htdocs/luci-static/resources/view/status/index.js
+@@ -4,34 +4,8 @@
+ 'require poll';
+ 'require fs';
+ 'require network';
+-'require ui';
+ 
+ return view.extend({
+-	handleToggleSection: function(include, container, ev) {
+-		var btn = ev.currentTarget;
+-
+-		include.hide = !include.hide;
+-
+-		btn.setAttribute('data-style', include.hide ? 'active' : 'inactive');
+-		btn.setAttribute('class', include.hide ? 'label notice' : 'label');
+-		btn.firstChild.data = include.hide ? _('Show') : _('Hide');
+-		btn.blur();
+-
+-		container.style.display = include.hide ? 'none' : 'block';
+-
+-		if (include.hide) {
+-			localStorage.setItem(include.id, 'hide');
+-		} else {
+-			dom.content(container,
+-				E('p', {}, E('em', { 'class': 'spinning' },
+-					[ _('Collecting data...') ])
+-				)
+-			);
+-
+-			localStorage.removeItem(include.id);
+-		}
+-	},
+-
+ 	invokeIncludesLoad: function(includes, first_load) {
+ 		var tasks = [], has_load = false;
+ 
+@@ -130,16 +104,7 @@ return view.extend({
+ 			rv.appendChild(E('div', { 'class': 'cbi-section', 'style': 'display: none' }, [
+ 				E('div', { 'class': 'cbi-title' },[
+ 					E('h3', { 'style': 'display: flex; justify-content: space-between' }, [
+-						title || '-',
+-						E('span', {
+-							'class': includes[i].hide ? 'label notice' : 'label',
+-							'style': 'display: flex; align-items: center; justify-content: center; min-width: 4em',
+-							'data-style': includes[i].hide ? 'active' : 'inactive',
+-							'data-indicator': 'poll-status',
+-							'data-clickable': 'true',
+-							'click': ui.createHandlerFn(this, 'handleToggleSection',
+-										    includes[i], container)
+-						}, [ _(includes[i].hide ? 'Show' : 'Hide') ])
++						title || '-'
+ 					]),
+ 				]),
+ 				container
