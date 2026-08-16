@@ -18,11 +18,15 @@ jobs:
           ref: qqxu223-upstream-diff
           fetch-depth: 0
 
-      - name: Sync with upstream
+      - name: Sync with upstream when changed
         run: |
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git remote add upstream https://github.com/mgz0227/OpenWrt_x86.git
           git fetch upstream master
+          if [ "$(git rev-parse HEAD)" = "$(git rev-parse upstream/master)" ]; then
+            echo "No upstream changes."
+            exit 0
+          fi
           git rebase upstream/master
           git push --force-with-lease origin qqxu223-upstream-diff
