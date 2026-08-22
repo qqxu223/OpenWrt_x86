@@ -1,0 +1,110 @@
+name: Sync upstream and restore customizations
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      build:
+        description: 'Sync and trigger firmware build'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: upstream-sync-restore
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: https://github.com/mgz0227/OpenWrt_x86.git
+  BUILD_EVENT: build-x86_64
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.sync.outputs.changed }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: master
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Sync upstream and restore customizations
+        id: sync
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git remote add upstream "$UPSTREAM_REPO"
+          git fetch upstream master --quiet
+
+          upstream_only=$(git rev-list --count HEAD..upstream/master)
+          echo "upstream-only-commits=$upstream_only"
+          if [ "$upstream_only" -eq 0 ]; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo '上游无变化，跳过重置、恢复和编译。'
+            exit 0
+          fi
+
+          echo '检测到上游变化，重置 master 到 upstream/master。'
+          git reset --hard upstream/master
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          config = Path('devices/common/.config')
+          text = config.read_text()
+          marker = 'CONFIG_PACKAGE_openwrt-keyring=y\n'
+          if 'CONFIG_PACKAGE_meowwrt-keyring=y' not in text:
+              if marker not in text:
+                  raise SystemExit('找不到 openwrt-keyring 配置位置')
+              text = text.replace(marker, marker + 'CONFIG_PACKAGE_meowwrt-keyring=y\n', 1)
+              config.write_text(text)
+
+          diy = Path('devices/common/diy.sh')
+          text = diy.read_text()
+          old = '''luci-app-wizard luci-base luci-compat luci-lib-ipkg luci-lib-fs luci-app-log-viewer \\\nluci-app-argon-config'''
+          new = '''luci-app-wizard luci-base luci-compat luci-lib-ipkg luci-lib-fs luci-app-log-viewer luci-app-wireguard luci-app-vnt luci-app-lucky luci-app-vlmcsd luci-app-wolplus luci-app-iperf3-server \\\nluci-app-argon-config'''
+          if old not in text:
+              raise SystemExit('找不到 diy.sh 插件配置位置')
+          text = text.replace(old, new, 1)
+
+          old = '''luci-app-argon-config luci-app-ddns-go luci-app-openclash luci-app-adguardhome tcpdump-mini open-vm-tools \\\nwget-ssl'''
+          new = '''luci-app-argon-config luci-app-ddns-go luci-app-openclash luci-app-adguardhome tcpdump-mini open-vm-tools wireguard-tools \\\nwget-ssl'''
+          if old not in text:
+              raise SystemExit('找不到 diy.sh wireguard 配置位置')
+          text = text.replace(old, new, 1)
+          diy.write_text(text)
+          PY
+
+          # 上游没有该补丁时，明确确保它不会被恢复。
+          rm -f devices/common/patches/011-fix-ncurses-host-widec.patch
+
+          git add devices/common/.config devices/common/diy.sh
+          if ! git diff --cached --quiet; then
+            git commit -m 'Sync upstream and restore custom package selections'
+          fi
+          git push origin HEAD:master
+          echo 'changed=true' >> "$GITHUB_OUTPUT"
+
+      - name: Trigger firmware build
+        if: steps.sync.outputs.changed == 'true' && (github.event_name == 'schedule' || inputs.build == true)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body -X POST \
+            "https://api.github.com/repos/${{ github.repository }}/dispatches" \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -d '{"event_type":"build-x86_64","client_payload":{"target":"x86_64"}}'

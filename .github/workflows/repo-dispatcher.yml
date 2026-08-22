@@ -8,13 +8,8 @@
 
 name: Repo Dispatcher
 
-on: 
-  # push: 
-  #   branches:
-  #     - master
-  schedule:
-    - cron: '0 12 * * *'
-      timezone: "Asia/Shanghai"
+on:
+  # 自动同步和构建由 upstream-sync-restore.yml 负责。
   workflow_dispatch:
     inputs:
       param:
