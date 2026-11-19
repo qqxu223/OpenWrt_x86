@@ -288,6 +288,15 @@ jobs:
         clean: ${{ contains(github.event.action, 'nocache') }}
         prefix: ${{ github.workspace }}/openwrt
     
+    - name: Fix Go toolchain for xray-core
+      run: |
+        cd openwrt
+        echo "=== GOTOOLCHAIN before ==="
+        grep -rn "GOTOOLCHAIN" feeds/packages/lang/golang/ || true
+        find feeds/packages/lang/golang -type f -name "*.mk" -exec sed -i -E 's/(GOTOOLCHAIN[[:space:]]*:?\??=[[:space:]]*)local/\1auto/g' {} +
+        echo "=== GOTOOLCHAIN after ==="
+        grep -rn "GOTOOLCHAIN" feeds/packages/lang/golang/ || true
+
     - name: Check space usage
       run: |
         shopt -s extglob
